@@ -1,0 +1,45 @@
+{
+  "copilot_cli": {
+    "project": "SuiteSpot",
+    "version": "1.0.0",
+    "context_gathering": {
+      "mode": "memory_only",
+      "suppress_documentation": true,
+      "suppress_output": [
+        "markdown_files",
+        "summary_documents",
+        "tables",
+        "ascii_tables",
+        "detailed_explanations",
+        "directory_listings",
+        "checkmarks_and_bullets"
+      ],
+      "response_format": "minimal",
+      "response_on_gather": "✓ Context loaded. Ready.",
+      "files_to_read": [
+        "project.json",
+        "CLAUDE_AI.md",
+        "DECISIONS.md"
+      ],
+      "api_reference_path": "SuiteSpotDocuments/instructions/context/"
+    },
+    "constraints": {
+      "thread_safety": "MANDATORY - gameWrapper->SetTimeout() for all game state",
+      "wrapper_lifetime": "Never store wrappers across frames",
+      "cvar_protocol": "Register only in onLoad()",
+      "persistence": "Call SaveTrainingMaps() after modifying RLTraining",
+      "file_format": "All .cpp files: #include \"pch.h\" first line"
+    },
+    "build": {
+      "command": "msbuild SuiteSpotv2.0\\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64",
+      "output": "SuiteSpotv2.0\\plugins\\SuiteSpot.dll",
+      "platform": "x64",
+      "configuration": "Release"
+    },
+    "git_workflow": {
+      "branches": "feature/*, bugfix/*, docs/*",
+      "release_tags": "v*.*.*",
+      "auto_release_on_tag": true
+    }
+  }
+}

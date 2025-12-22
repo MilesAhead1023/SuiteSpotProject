@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(MSBuild:*)",
+      "Bash(powershell:*)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File generate_compile_commands.ps1)",
+      "Bash(dir:*)",
+      "Bash(copy BakkesmodPluginTemplateBakkesmodPluginTemplate-masterlogging.h SuiteSeekerProjectlogging.h)",
+      "Bash(copy:*)",
+      "Bash(powershell.exe -Command \"Copy-Item ''Source.cpp'' ''Source_backup.cpp'' -Force\")",
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Professional\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe'' SuiteSpotv2.0\\\\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64 /v:minimal\")"
+    ]
+  },
+  "outputStyle": "Explanatory"
+}

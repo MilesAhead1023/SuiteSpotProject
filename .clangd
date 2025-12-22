@@ -1,0 +1,74 @@
+# clangd configuration for SuiteSpot BakkesMod Plugin
+# This configures the clangd language server for optimal C++ IntelliSense
+
+CompileFlags:
+  # Use compile_commands.json for compilation database
+  CompilationDatabase: .
+
+  # Additional flags for clangd to understand MSVC-specific code
+  Add:
+    # Windows-specific defines
+    - -D_WIN32
+    - -D_WIN64
+    - -DWIN32
+    - -DWIN64
+    - -D_WINDOWS
+
+    # MSVC compatibility
+    - -fms-extensions
+    - -fms-compatibility
+    - -fms-compatibility-version=19.29
+    - -fdelayed-template-parsing
+
+    # C++ standard (matches your project)
+    - -std=c++20
+
+    # Suppress common clangd warnings for Windows/MSVC code
+    - -Wno-unknown-pragmas
+    - -Wno-microsoft-include
+    - -Wno-pragma-pack
+    - -Wno-ignored-attributes
+
+  # Remove flags that clangd doesn't understand
+  Remove:
+    - /Yu*        # Precompiled header usage (MSVC-specific)
+    - /Yc*        # Precompiled header creation (MSVC-specific)
+    - /Fp*        # Precompiled header file path
+    - /MP         # Multi-processor compilation
+    - /W3         # Warning level
+    - /EHsc       # Exception handling model
+    - /MT         # Multi-threaded static runtime
+    - /Zi         # Debug info format
+    - /O*         # Optimization flags
+    - /Gd         # Calling convention
+    - /TP         # Compile as C++
+    - /GR         # Runtime type info
+
+Index:
+  # Index the entire BakkesMod SDK for better navigation
+  Background: Build
+
+Diagnostics:
+  # Configure diagnostic behavior
+  UnusedIncludes: None  # Don't warn about unused includes (common with pch.h)
+  MissingIncludes: Strict
+
+  # Suppress common BakkesMod SDK warnings
+  Suppress:
+    - unused-parameter
+    - unused-variable
+
+InlayHints:
+  # Show inline hints for better code understanding
+  Enabled: Yes
+  ParameterNames: Yes
+  DeducedTypes: Yes
+  Designators: Yes
+
+Hover:
+  # Show documentation on hover
+  ShowAKA: Yes
+
+Completion:
+  # Better auto-completion
+  AllScopes: Yes

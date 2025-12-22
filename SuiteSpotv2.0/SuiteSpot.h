@@ -26,8 +26,6 @@ constexpr auto plugin_version =
     stringify(VERSION_PATCH) "."
     stringify(VERSION_BUILD);
 
-// NOTE: inherit from SettingsWindowBase (not “GuiBase”)
-// Post-match data shared with overlay window
 struct PostMatchPlayerRow {
     int teamIndex = -1;
     bool isLocal = false;
@@ -36,13 +34,12 @@ struct PostMatchPlayerRow {
     int goals = 0;
     int assists = 0;
     int saves = 0;
-    int shots = 0;        // New: shots on goal
-    int ping = 0;         // New: network quality/ping
-    bool isMVP = false;   // New: MVP indicator for styling
+    int shots = 0;
+    int ping = 0;
+    bool isMVP = false;
 };
 
-struct PostMatchInfo
-{
+struct PostMatchInfo {
     bool active = false;
     std::chrono::steady_clock::time_point start;
     int myScore = 0;
@@ -56,12 +53,15 @@ struct PostMatchInfo
     std::vector<PostMatchPlayerRow> players;
 };
 
+// NOTE: inherit from SettingsWindowBase (not “GuiBase”)
 class SuiteSpot final : public BakkesMod::Plugin::BakkesModPlugin,
-                        public SettingsWindowBase
+                        public SettingsWindowBase,
+                        public PluginWindowBase
 {
 public:
     // Persistence folders and files under %APPDATA%\bakkesmod\bakkesmod\data
     void EnsureDataDirectories() const;
+    // ... (rest of persistence methods)
     std::filesystem::path GetDataRoot() const;
     std::filesystem::path GetSuiteTrainingDir() const;
     std::filesystem::path GetTrainingFilePath() const;   // SuiteTraining\SuiteSpotTrainingMaps.txt
@@ -93,6 +93,10 @@ public:
     void RenderSettings() override;
     void SetImGuiContext(uintptr_t ctx) override;
 
+    // Standalone Window UI (PluginWindowBase interface)
+    void Render() override;
+    void RenderWindow() override;
+
     // hooks
     void LoadHooks();
     void GameEndedEvent(std::string name);
@@ -113,6 +117,7 @@ public:
 private:
     // state (one definition only)
     bool enabled = false;
+    bool showWindow = false; // Internal toggle for the standalone control window
 
     bool autoQueue = false;   // (renamed from “Requeue”)
     int  mapType = 0;         // 0=Freeplay, 1=Training, 2=Workshop
@@ -151,73 +156,59 @@ private:
     // Shuffle helpers
     int GetRandomTrainingIndex() const;
 
-    void RenderOverlayWindow();
-
-    PostMatchInfo postMatch;
-    float postMatchDurationSec = 15.0f;
     ImGuiContext* imguiCtx = nullptr;
     
     // Loadout management
     std::unique_ptr<LoadoutManager> loadoutManager;
 
-    // Post-match overlay layout tuning - comprehensive customization
-    
+    PostMatchInfo postMatch;
+    float postMatchDurationSec = 15.0f;
+
     // Window positioning and size
     float overlayWidth = 880.0f;
-    float overlayHeight = 400.0f;  // Increased for new layout
-    float overlayOffsetX = 0.0f;   // pixels relative to centered position
-    float overlayOffsetY = 0.0f;   // pixels relative to default top offset
-    
+    float overlayHeight = 400.0f;
+    float overlayOffsetX = 0.0f;
+    float overlayOffsetY = 0.0f;
+
     // Team section layout
     float teamHeaderHeight = 28.0f;
     float playerRowHeight = 24.0f;
-    float teamSectionSpacing = 12.0f;  // Gap between blue and orange sections
-    float sectionPadding = 8.0f;       // Internal padding in team sections
-    
-    // Column positions (from left edge of overlay)
+    float teamSectionSpacing = 12.0f;
+    float sectionPadding = 8.0f;
+
+    // Column positions
     float nameColumnX = 50.0f;
     float scoreColumnX = 230.0f;
     float goalsColumnX = 290.0f;
     float assistsColumnX = 350.0f;
     float savesColumnX = 410.0f;
-    float shotsColumnX = 470.0f;      // New column
-    float pingColumnX = 530.0f;       // New column
-    
+    float shotsColumnX = 470.0f;
+    float pingColumnX = 530.0f;
+
     // Text and styling
     float mainFontSize = 14.0f;
     float headerFontSize = 12.0f;
     float teamHeaderFontSize = 16.0f;
-    
+
     // Colors and transparency
     float overlayAlpha = 0.85f;
-    float blueTeamHue = 240.0f;        // HSV hue for blue team (0-360)
-    float blueTeamSat = 0.8f;          // HSV saturation (0-1)
-    float blueTeamVal = 0.6f;          // HSV value/brightness (0-1)
-    float orangeTeamHue = 25.0f;       // HSV hue for orange team
-    float orangeTeamSat = 0.9f;        
-    float orangeTeamVal = 0.7f;        
-    float backgroundAlpha = 0.4f;      // Team section background alpha
-    float headerAlpha = 0.8f;          // Team header background alpha
-    
+    float blueTeamHue = 240.0f;
+    float blueTeamSat = 0.8f;
+    float blueTeamVal = 0.6f;
+    float orangeTeamHue = 25.0f;
+    float orangeTeamSat = 0.9f;
+    float orangeTeamVal = 0.7f;
+    float backgroundAlpha = 0.4f;
+    float headerAlpha = 0.8f;
+
     // MVP and special effects
-    float mvpCheckmarkSize = 1.2f;     // Scale factor for MVP checkmark
-    bool showMvpGlow = true;           // Add glow effect to MVP players
-    bool showTeamScores = true;        // Show scores in team headers
-    bool showColumnHeaders = true;     // Show stat column headers
-    
+    float mvpCheckmarkSize = 1.2f;
+    bool showMvpGlow = true;
+    bool showTeamScores = true;
+    bool showColumnHeaders = true;
+
     // Animation and effects
-    float fadeInDuration = 0.5f;       // Time to fade in overlay
-    float fadeOutDuration = 2.0f;      // Time to fade out at end
-    bool enableFadeEffects = true;     // Enable fade in/out
-    
-    // Legacy column offsets (kept for compatibility but not used in new layout)
-    float colScoreOffset = 230.0f;
-    float colGoalsOffset = 310.0f;
-    float colAssistsOffset = 390.0f;
-    float colSavesOffset = 430.0f;
-    float colScoreOffsetOrange = 230.0f;
-    float colGoalsOffsetOrange = 310.0f;
-    float colAssistsOffsetOrange = 390.0f;
-    float colSavesOffsetOrange = 430.0f;
-    float rowSpacing = 16.0f;  // Legacy, replaced by playerRowHeight
+    float fadeInDuration = 0.5f;
+    float fadeOutDuration = 2.0f;
+    bool enableFadeEffects = true;
 };

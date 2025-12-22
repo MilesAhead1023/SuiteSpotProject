@@ -1,4 +1,7 @@
 #include "pch.h"
+#define NOMINMAX
+#include <windows.h>
+#include <shellapi.h>
 #include "SuiteSpot.h"
 #include "MapList.h"
 #include <fstream>
@@ -173,7 +176,12 @@ void SuiteSpot::RenderSettings() {
                 ImGui::SetTooltip("Enable/disable all SuiteSpot auto-loading and queuing features");
             }
 
-            ImGui::SameLine(300);
+            ImGui::SameLine();
+            if (ImGui::Button("Open Standalone Window")) {
+                cvarManager->executeCommand("suitespot_toggle_window");
+            }
+
+            ImGui::SameLine(450);
             ImGui::TextUnformatted("Map Mode:");
             ImGui::SameLine(400);
             
@@ -1307,7 +1315,22 @@ void SuiteSpot::RenderPrejumpPacksTab() {
         ImGui::Text("%d", pack.plays);
         ImGui::NextColumn();
 
-        // Actions column - NEW: Load Now and Add to Shuffle
+        // Actions column - NEW: Watch Video, Load Now and Add to Shuffle
+        
+        // Watch Video button
+        if (!pack.videoUrl.empty()) {
+            std::string watchLabel = "Watch##" + std::to_string(row);
+            if (ImGui::SmallButton(watchLabel.c_str())) {
+                // Open URL in default browser
+                // ShellExecute is available via Windows headers in pch.h
+                ShellExecuteA(NULL, "open", pack.videoUrl.c_str(), NULL, NULL, SW_SHOWNORMAL);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Watch preview video");
+            }
+            ImGui::SameLine();
+        }
+
         // Load Now button
         std::string loadLabel = "Load##" + std::to_string(row);
         if (ImGui::SmallButton(loadLabel.c_str())) {
@@ -1368,8 +1391,60 @@ void SuiteSpot::RenderPrejumpPacksTab() {
     ImGui::Columns(1);
     ImGui::Separator();
 
+        ImGui::Spacing();
+
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "💡 Tip: Click column headers to sort | Drag column borders to resize");
+
+    }
+
+void SuiteSpot::RenderWindow() {
+    ImGui::TextUnformatted("SuiteSpot Standalone Window");
+    ImGui::Separator();
+    
+    if (enabled) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Plugin is ENABLED");
+    } else {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Plugin is DISABLED");
+    }
+
     ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "💡 Tip: Click column headers to sort | Drag column borders to resize");
+    ImGui::Text("Current Map Mode: ");
+    ImGui::SameLine();
+    const char* modeNames[] = { "Freeplay", "Training", "Workshop" };
+    ImGui::TextUnformatted(modeNames[mapType]);
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Post-Match Statistics:");
+    
+    if (postMatch.active) {
+        ImGui::Text("Overlay is currently ACTIVE");
+    } else {
+        ImGui::Text("Overlay is currently INACTIVE");
+    }
+
+    if (ImGui::Button("Trigger Test Overlay")) {
+        // Mock some data if empty
+        if (postMatch.players.empty()) {
+            postMatch.myTeamName = "Blue Team";
+            postMatch.oppTeamName = "Orange Team";
+            postMatch.myScore = 3;
+            postMatch.oppScore = 2;
+            postMatch.playlist = "Competitive Doubles";
+            postMatch.overtime = false;
+            
+            PostMatchPlayerRow p1; p1.name = "LocalPlayer"; p1.score = 650; p1.goals = 2; p1.isLocal = true; p1.teamIndex = 0; p1.isMVP = true;
+            PostMatchPlayerRow p2; p2.name = "Teammate"; p2.score = 400; p2.goals = 1; p2.isLocal = false; p2.teamIndex = 0;
+            PostMatchPlayerRow p3; p3.name = "Opponent 1"; p3.score = 500; p3.goals = 1; p3.isLocal = false; p3.teamIndex = 1; p3.isMVP = true;
+            PostMatchPlayerRow p4; p4.name = "Opponent 2"; p4.score = 300; p4.goals = 1; p4.isLocal = false; p4.teamIndex = 1;
+            
+            postMatch.players = { p1, p2, p3, p4 };
+        }
+        
+        postMatch.start = std::chrono::steady_clock::now();
+        postMatch.active = true;
+    }
+    
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Show the post-match stats overlay for testing");
+    }
 }
-
-

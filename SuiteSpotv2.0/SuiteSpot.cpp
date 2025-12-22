@@ -171,246 +171,7 @@ void SuiteSpot::EnsureDataDirectories() const {
     ec.clear(); std::filesystem::create_directories(GetSuiteTrainingDir(), ec);
 }
 
-// #detailed comments: RenderOverlayWindow
-// Purpose: Centralized rendering entry used by both Render() and
-// RenderWindow() to draw the post-match overlay using ImGui low-level
-// primitives (GetWindowDrawList, AddText, AddRectFilled, etc.).
-//
-// Key responsibilities:
-//  - Ensure an ImGui context is active before any ImGui calls.
-//  - Handle the overlay's lifetime (start time + duration) and fading.
-//  - Compute layout and clamp values to safe ranges to avoid degenerate
-//    geometry which can cause visual glitches or ImGui asserts.
-//
-// INVARIANT: This code must not perform any blocking I/O or scheduling
-// and must be safe to call every frame from the UI thread. The fading
-// math relies on postMatch.start being set to steady_clock::now() when
-// the overlay is activated; changing the time source will affect timing.
-//
-// DO NOT CHANGE: The overlayOpenedByUs logic integrates with external
-// menu toggling via cvarManager->executeCommand("togglemenu SuiteSpot");
-// altering this behavior can break the delicate interaction between
-// automatic overlay open/close and user-initiated menu state.
-void SuiteSpot::RenderOverlayWindow() {
-    // Ensure an ImGui context is active before doing any rendering work.
-    if (!ImGui::GetCurrentContext()) {
-        if (imguiCtx) {
-            ImGui::SetCurrentContext(imguiCtx);
-        } else {
-            return;
-        }
-    }
 
-    if (!postMatch.active) {
-        return;
-    }
-
-    static bool loggedOnce = false;
-    if (!loggedOnce) {
-        LOG("SuiteSpot: RenderOverlayWindow - overlay is active, starting to render");
-        loggedOnce = true;
-    }
-
-    const auto now = std::chrono::steady_clock::now();
-    const float elapsed = std::chrono::duration<float>(now - postMatch.start).count();
-    if (elapsed >= postMatchDurationSec) {
-        postMatch.active = false;
-        return;
-    }
-
-    // Fade during the last 2 seconds
-    float alpha = 1.0f;
-    const float fade = 2.0f;
-    if (elapsed > postMatchDurationSec - fade) {
-        alpha = std::max(0.0f, (postMatchDurationSec - elapsed) / fade);
-    }
-
-    // Determine local team index for layout
-    int myTeamIndex = -1;
-    for (const auto& p : postMatch.players) {
-        if (p.isLocal && p.teamIndex >= 0) {
-            myTeamIndex = p.teamIndex;
-            break;
-        }
-    }
-    if (myTeamIndex < 0 && !postMatch.players.empty()) {
-        myTeamIndex = postMatch.players.front().teamIndex;
-    }
-
-    ImVec2 display = ImGui::GetIO().DisplaySize;
-    // Clamp layout inputs to avoid degenerate windows
-    overlayWidth = std::max(400.0f, overlayWidth);
-    overlayHeight = std::max(180.0f, overlayHeight);
-    rowSpacing = std::max(10.0f, rowSpacing);
-
-    const ImVec2 overlaySize = ImVec2(overlayWidth, overlayHeight);
-    ImVec2 pos = ImVec2((display.x - overlaySize.x) * 0.5f + overlayOffsetX, display.y * 0.08f + overlayOffsetY);
-
-    ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-    ImGui::SetNextWindowSize(overlaySize, ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.0f); // we draw our own background
-
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                             ImGuiWindowFlags_NoScrollbar |
-                             ImGuiWindowFlags_NoSavedSettings |
-                             ImGuiWindowFlags_NoFocusOnAppearing |
-                             ImGuiWindowFlags_NoInputs |
-                             ImGuiWindowFlags_NoNavFocus;
-
-    if (!ImGui::Begin("SuiteSpot Post Match Overlay", nullptr, flags)) {
-        ImGui::End();
-        return;
-    }
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 winPos = ImGui::GetWindowPos();
-    ImVec2 winSize = ImGui::GetWindowSize();
-    ImVec2 winEnd = ImVec2(winPos.x + winSize.x, winPos.y + winSize.y);
-
-    ImU32 baseBg = ImGui::GetColorU32(ImVec4(0.f, 0.f, 0.f, 0.55f * alpha));
-    ImU32 headerBg = ImGui::GetColorU32(ImVec4(0.f, 0.f, 0.f, 0.8f * alpha));
-    ImU32 white = ImGui::GetColorU32(ImVec4(1.f, 1.f, 1.f, alpha));
-
-    dl->AddRectFilled(winPos, winEnd, baseBg, 8.0f);
-    dl->AddRectFilled(winPos, ImVec2(winEnd.x, winPos.y + 34.0f), headerBg, 8.0f);
-    dl->AddText(ImVec2(winPos.x + 12.0f, winPos.y + 8.0f), white, "POST MATCH");
-
-    // New Rocket League style layout with full customization
-    const float panelY = winPos.y + 45.0f;
-    const float panelHeight = winSize.y - 60.0f;
-    
-    // Calculate team player counts for headers
-    int blueCount = 0, orangeCount = 0;
-    for (const auto& row : postMatch.players) {
-        if (row.teamIndex == 0) blueCount++;
-        else if (row.teamIndex == 1) orangeCount++;
-    }
-    
-    // Team section layout using customizable variables
-    const float blueTeamHeight = teamHeaderHeight + (blueCount * playerRowHeight) + sectionPadding * 2;
-    const float orangeTeamStart = panelY + blueTeamHeight + teamSectionSpacing;
-    const float orangeTeamHeight = teamHeaderHeight + (orangeCount * playerRowHeight) + sectionPadding * 2;
-    
-    // Convert HSV colors to RGB for team backgrounds
-    auto hsvToRgb = [](float h, float s, float v, float a) -> ImVec4 {
-        float c = v * s;
-        float x = c * (1 - abs(fmod(h / 60.0f, 2) - 1));
-        float m = v - c;
-        float r, g, b;
-        if (h < 60) { r = c; g = x; b = 0; }
-        else if (h < 120) { r = x; g = c; b = 0; }
-        else if (h < 180) { r = 0; g = c; b = x; }
-        else if (h < 240) { r = 0; g = x; b = c; }
-        else if (h < 300) { r = x; g = 0; b = c; }
-        else { r = c; g = 0; b = x; }
-        return ImVec4(r + m, g + m, b + m, a);
-    };
-    
-    // Blue team section
-    ImVec4 blueHeaderColor = hsvToRgb(blueTeamHue, blueTeamSat, blueTeamVal, headerAlpha * alpha);
-    ImVec4 blueRowColor = hsvToRgb(blueTeamHue, blueTeamSat * 0.5f, blueTeamVal * 0.4f, backgroundAlpha * alpha);
-    ImU32 blueHeaderBg = ImGui::GetColorU32(blueHeaderColor);
-    ImU32 blueRowBg = ImGui::GetColorU32(blueRowColor);
-    
-    dl->AddRectFilled(
-        ImVec2(winPos.x + 8.0f, panelY), 
-        ImVec2(winEnd.x - 8.0f, panelY + blueTeamHeight), 
-        blueRowBg, 6.0f
-    );
-    dl->AddRectFilled(
-        ImVec2(winPos.x + 8.0f, panelY), 
-        ImVec2(winEnd.x - 8.0f, panelY + teamHeaderHeight), 
-        blueHeaderBg, 6.0f
-    );
-    
-    // Orange team section
-    ImVec4 orangeHeaderColor = hsvToRgb(orangeTeamHue, orangeTeamSat, orangeTeamVal, headerAlpha * alpha);
-    ImVec4 orangeRowColor = hsvToRgb(orangeTeamHue, orangeTeamSat * 0.5f, orangeTeamVal * 0.4f, backgroundAlpha * alpha);
-    ImU32 orangeHeaderBg = ImGui::GetColorU32(orangeHeaderColor);
-    ImU32 orangeRowBg = ImGui::GetColorU32(orangeRowColor);
-    
-    dl->AddRectFilled(
-        ImVec2(winPos.x + 8.0f, orangeTeamStart), 
-        ImVec2(winEnd.x - 8.0f, orangeTeamStart + orangeTeamHeight), 
-        orangeRowBg, 6.0f
-    );
-    dl->AddRectFilled(
-        ImVec2(winPos.x + 8.0f, orangeTeamStart), 
-        ImVec2(winEnd.x - 8.0f, orangeTeamStart + teamHeaderHeight), 
-        orangeHeaderBg, 6.0f
-    );
-
-    // Team headers with customizable content
-    ImU32 whiteText = ImGui::GetColorU32(ImVec4(1.f, 1.f, 1.f, alpha));
-    if (showTeamScores) {
-        std::string blueHeader = std::to_string(postMatch.myScore) + " BLUE";
-        dl->AddText(ImVec2(winPos.x + 20.0f, panelY + 6.0f), whiteText, blueHeader.c_str());
-        
-        std::string orangeHeader = std::to_string(postMatch.oppScore) + " ORANGE";
-        dl->AddText(ImVec2(winPos.x + 20.0f, orangeTeamStart + 6.0f), whiteText, orangeHeader.c_str());
-    } else {
-        dl->AddText(ImVec2(winPos.x + 20.0f, panelY + 6.0f), whiteText, "BLUE");
-        dl->AddText(ImVec2(winPos.x + 20.0f, orangeTeamStart + 6.0f), whiteText, "ORANGE");
-    }
-    
-    // Column headers with customizable positions
-    if (showColumnHeaders) {
-        ImU32 headerText = ImGui::GetColorU32(ImVec4(0.8f, 0.8f, 0.8f, alpha));
-        const float headerY = panelY + teamHeaderHeight + 4.0f;
-        
-        dl->AddText(ImVec2(winPos.x + scoreColumnX, headerY), headerText, "SCORE");
-        dl->AddText(ImVec2(winPos.x + goalsColumnX, headerY), headerText, "GOALS");
-        dl->AddText(ImVec2(winPos.x + assistsColumnX, headerY), headerText, "ASSISTS");
-        dl->AddText(ImVec2(winPos.x + savesColumnX, headerY), headerText, "SAVES");
-        dl->AddText(ImVec2(winPos.x + shotsColumnX, headerY), headerText, "SHOTS");
-        dl->AddText(ImVec2(winPos.x + pingColumnX, headerY), headerText, "PING");
-    }
-
-    // Player rows with customizable positioning
-    float blueRowY = panelY + teamHeaderHeight + (showColumnHeaders ? 24.0f : 8.0f);
-    float orangeRowY = orangeTeamStart + teamHeaderHeight + 8.0f;
-    
-    for (const auto& row : postMatch.players) {
-        float* rowY = (row.teamIndex == 0) ? &blueRowY : &orangeRowY;
-        
-        // MVP checkmark with customizable styling
-        std::string displayName = row.name;
-        if (row.isLocal) displayName = "[YOU] " + displayName;
-        
-        if (row.isMVP) {
-            ImU32 mvpColor = showMvpGlow ? 
-                ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.2f, alpha)) : 
-                ImGui::GetColorU32(ImVec4(0.0f, 0.8f, 0.0f, alpha));
-            
-            // Scale checkmark based on size setting
-            float checkmarkX = winPos.x + nameColumnX - 25.0f;
-            if (mvpCheckmarkSize != 1.0f) {
-                // Could implement scaled rendering here
-            }
-            dl->AddText(ImVec2(checkmarkX, *rowY), mvpColor, "✓");
-        }
-        
-        // Player name and stats using customizable column positions
-        dl->AddText(ImVec2(winPos.x + nameColumnX, *rowY), whiteText, displayName.c_str());
-        dl->AddText(ImVec2(winPos.x + scoreColumnX, *rowY), whiteText, std::to_string(row.score).c_str());
-        dl->AddText(ImVec2(winPos.x + goalsColumnX, *rowY), whiteText, std::to_string(row.goals).c_str());
-        dl->AddText(ImVec2(winPos.x + assistsColumnX, *rowY), whiteText, std::to_string(row.assists).c_str());
-        dl->AddText(ImVec2(winPos.x + savesColumnX, *rowY), whiteText, std::to_string(row.saves).c_str());
-        dl->AddText(ImVec2(winPos.x + shotsColumnX, *rowY), whiteText, std::to_string(row.shots).c_str());
-        dl->AddText(ImVec2(winPos.x + pingColumnX, *rowY), whiteText, std::to_string(row.ping).c_str());
-        
-        *rowY += playerRowHeight;
-    }
-
-    // Match info at bottom
-    std::ostringstream status;
-    status << postMatch.playlist;
-    if (postMatch.overtime) status << " | OVERTIME";
-    ImU32 statusColor = ImGui::GetColorU32(ImVec4(0.7f, 0.7f, 0.7f, alpha));
-    dl->AddText(ImVec2(winPos.x + 12.0f, winEnd.y - 25.0f), statusColor, status.str().c_str());
-
-    ImGui::End();
-}
 
 int SuiteSpot::GetRandomTrainingIndex() const {
     if (trainingShuffleBag.empty()) {
@@ -449,13 +210,24 @@ void SuiteSpot::LoadTrainingMaps() {
     RLTraining.clear();
     auto f = GetTrainingFilePath();
     std::error_code ec;
+    
+    // Check existence first to avoid noisy logs for fresh installs
     if (!std::filesystem::exists(f, ec)) return;
+
     std::ifstream in(f.string());
-    if (!in.is_open()) return;
+    if (!in.is_open()) {
+        LOG("SuiteSpot: Failed to open training maps file: {}", f.string());
+        return;
+    }
+
     std::string line;
     bool sawLegacyFormat = false;
+    int lineNum = 0;
+
     while (std::getline(in, line)) {
+        lineNum++;
         if (line.empty()) continue;
+
         // Expected format: code, Name, Shots:#  (shots optional for backward compatibility)
         std::vector<std::string> parts;
         size_t start = 0;
@@ -472,12 +244,14 @@ void SuiteSpot::LoadTrainingMaps() {
         }
 
         if (parts.size() < 2) {
-            continue; // malformed
+            LOG("SuiteSpot: Malformed entry on line {}: '{}' - expected 'code,name'", lineNum, line);
+            continue; 
         }
 
         std::string code = parts[0];
         std::string name = parts[1];
         int shots = 0;
+        
         // Legacy: shots embedded in name "(#)" when only 2 parts existed.
         if (parts.size() == 2) {
             shots = ParseTrailingShots(name);
@@ -491,13 +265,21 @@ void SuiteSpot::LoadTrainingMaps() {
                 name = Trim(name.substr(0, openPos));
             }
         }
+        
         if (parts.size() >= 3) {
             std::string shotsPart = parts[2];
             if (StartsWithCaseInsensitive(shotsPart, "shots:")) {
                 auto valStr = Trim(shotsPart.substr(6));
                 try {
                     shots = std::stoi(valStr);
+                } catch (const std::invalid_argument&) {
+                    LOG("SuiteSpot: Invalid shot count on line {}: '{}'", lineNum, valStr);
+                    shots = 0;
+                } catch (const std::out_of_range&) {
+                    LOG("SuiteSpot: Shot count out of range on line {}: '{}'", lineNum, valStr);
+                    shots = 0;
                 } catch (...) {
+                    LOG("SuiteSpot: Unknown error parsing shots on line {}", lineNum);
                     shots = 0;
                 }
             }
@@ -509,6 +291,8 @@ void SuiteSpot::LoadTrainingMaps() {
             entry.name = name;
             entry.shotCount = shots;
             RLTraining.push_back(entry);
+        } else {
+             LOG("SuiteSpot: Empty code or name on line {}", lineNum);
         }
     }
 
@@ -529,6 +313,7 @@ void SuiteSpot::LoadTrainingMaps() {
 
     // If we saw legacy entries, rewrite file in new format so future loads are clean.
     if (sawLegacyFormat) {
+        LOG("SuiteSpot: Upgrading legacy training file format...");
         SaveTrainingMaps();
     }
 }
@@ -1243,6 +1028,17 @@ void SuiteSpot::onLoad() {
     
     LoadHooks();
 
+    // Register toggle for the standalone window
+    cvarManager->registerNotifier("suitespot_toggle_window", [this](std::vector<std::string> args) {
+        showWindow = !showWindow;
+    }, "Toggle the SuiteSpot standalone control window", PERMISSION_ALL);
+
+    // Force the plugin "window" open so Render() is called every frame
+    // This allows us to draw the overlay even when the control window is closed.
+    gameWrapper->SetTimeout([this](GameWrapper* gw) {
+        cvarManager->executeCommand("openmenu " + GetMenuName());
+    }, 1.0f); // Small delay to ensure registration is complete
+
     // Enable/Disable plugin
     cvarManager->registerCvar("suitespot_enabled", "0", "Enable SuiteSpot", true, true, 0, true, 1)
         .addOnValueChanged([this](string oldValue, CVarWrapper cvar) {
@@ -1331,6 +1127,8 @@ void SuiteSpot::onLoad() {
     LOG("SuiteSpot: Plugin initialization complete");
 }
 
+
+
 void SuiteSpot::RenderPostMatchOverlay() {
     if (!ImGui::GetCurrentContext()) {
         if (imguiCtx) {
@@ -1373,7 +1171,8 @@ void SuiteSpot::RenderPostMatchOverlay() {
                              ImGuiWindowFlags_NoSavedSettings |
                              ImGuiWindowFlags_NoFocusOnAppearing |
                              ImGuiWindowFlags_NoInputs |
-                             ImGuiWindowFlags_NoNavFocus;
+                             ImGuiWindowFlags_NoNavFocus |
+                             ImGuiWindowFlags_NoBackground;
 
     bool windowOpen = true;
     if (!ImGui::Begin("SuiteSpot Post-Match Overlay", &windowOpen, flags)) {
@@ -1437,16 +1236,24 @@ void SuiteSpot::RenderPostMatchOverlay() {
         
         // Team section
         ImU32 teamColor;
+        auto hsvToRgb = [](float h, float s, float v, float a) -> ImVec4 {
+            float c = v * s;
+            float x = c * (1 - abs(fmod(h / 60.0f, 2) - 1));
+            float m = v - c;
+            float r = 0, g = 0, b = 0;
+            if (h < 60) { r = c; g = x; b = 0; }
+            else if (h < 120) { r = x; g = c; b = 0; }
+            else if (h < 180) { r = 0; g = c; b = x; }
+            else if (h < 240) { r = 0; g = x; b = c; }
+            else if (h < 300) { r = x; g = 0; b = c; }
+            else { r = c; g = 0; b = x; }
+            return ImVec4(r + m, g + m, b + m, a);
+        };
+
         if (teamIdx == 0) {
-            float h = blueTeamHue / 360.0f;
-            float r, g, b;
-            ImGui::ColorConvertHSVtoRGB(h, blueTeamSat, blueTeamVal, r, g, b);
-            teamColor = ImGui::GetColorU32(ImVec4(r, g, b, alpha));
+            teamColor = ImGui::GetColorU32(hsvToRgb(blueTeamHue, blueTeamSat, blueTeamVal, alpha));
         } else {
-            float h = orangeTeamHue / 360.0f;
-            float r, g, b;
-            ImGui::ColorConvertHSVtoRGB(h, orangeTeamSat, orangeTeamVal, r, g, b);
-            teamColor = ImGui::GetColorU32(ImVec4(r, g, b, alpha));
+            teamColor = ImGui::GetColorU32(hsvToRgb(orangeTeamHue, orangeTeamSat, orangeTeamVal, alpha));
         }
         
         std::string teamHeader = teamName;
@@ -1492,6 +1299,22 @@ void SuiteSpot::RenderPostMatchOverlay() {
     ImGui::End();
 }
 
+void SuiteSpot::Render() {
+    // Always attempt to render the post-match overlay (it handles its own internal active/timer state)
+    RenderPostMatchOverlay();
+
+    // Render the standalone control window if enabled
+    if (showWindow) {
+        ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("SuiteSpot Control", &showWindow)) {
+            RenderWindow();
+        }
+        ImGui::End();
+    }
+}
+
 void SuiteSpot::onUnload() {
+    gameWrapper->UnhookEvent("Function TAGame.GameEvent_Soccar_TA.EventMatchEnded");
+    gameWrapper->UnhookEvent("Function TAGame.AchievementManager_TA.HandleMatchEnded");
     LOG("SuiteSpot unloaded");
 }

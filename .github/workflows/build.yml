@@ -1,0 +1,184 @@
+name: Build SuiteSpot Plugin
+
+on:
+  push:
+    branches: [ master, main ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+env:
+  SOLUTION_PATH: SuiteSpotv2.0/SuiteSpot.sln
+  BUILD_CONFIG: Release
+  BUILD_PLATFORM: x64
+  ARTIFACT_NAME: SuiteSpot
+
+jobs:
+  build:
+    name: Build Plugin
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from version.h
+        id: version
+        shell: pwsh
+        run: |
+          $versionFile = "SuiteSpotv2.0/version.h"
+          $content = Get-Content $versionFile -Raw
+          
+          $major = [regex]::Match($content, 'VERSION_MAJOR\s+(\d+)').Groups[1].Value
+          $minor = [regex]::Match($content, 'VERSION_MINOR\s+(\d+)').Groups[1].Value
+          $patch = [regex]::Match($content, 'VERSION_PATCH\s+(\d+)').Groups[1].Value
+          $build = [regex]::Match($content, 'VERSION_BUILD\s+(\d+)').Groups[1].Value
+          
+          $version = "$major.$minor.$patch"
+          $fullVersion = "$major.$minor.$patch.$build"
+          
+          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          echo "FULL_VERSION=$fullVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          
+          Write-Host "Detected version: $version (Build $build)"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-version: latest
+
+      - name: Restore NuGet packages
+        run: nuget restore "${{ env.SOLUTION_PATH }}"
+
+      - name: Build solution
+        run: |
+          msbuild "${{ env.SOLUTION_PATH }}" `
+            /p:Configuration=${{ env.BUILD_CONFIG }} `
+            /p:Platform=${{ env.BUILD_PLATFORM }} `
+            /v:minimal `
+            /m
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          $dllPath = "SuiteSpotv2.0/plugins/SuiteSpot.dll"
+          if (Test-Path $dllPath) {
+            $file = Get-Item $dllPath
+            Write-Host "✓ Build succeeded"
+            Write-Host "  DLL: $($file.Name)"
+            Write-Host "  Size: $($file.Length / 1MB)MB"
+            Write-Host "  Built: $($file.LastWriteTime)"
+          } else {
+            Write-Error "✗ Build failed: DLL not found at $dllPath"
+            exit 1
+          }
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          $outputDir = "build-artifacts"
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          
+          # Copy DLL
+          Copy-Item "SuiteSpotv2.0/plugins/SuiteSpot.dll" -Destination $outputDir
+          
+          # Copy PDB (debug symbols)
+          if (Test-Path "SuiteSpotv2.0/plugins/SuiteSpot.pdb") {
+            Copy-Item "SuiteSpotv2.0/plugins/SuiteSpot.pdb" -Destination $outputDir
+          }
+          
+          # Copy build output folder for complete package
+          if (Test-Path "SuiteSpotv2.0/plugins") {
+            Copy-Item "SuiteSpotv2.0/plugins" -Destination "$outputDir/plugins" -Recurse
+          }
+          
+          Write-Host "Artifacts collected:"
+          Get-ChildItem -Path $outputDir -Recurse | ForEach-Object {
+            Write-Host "  $_"
+          }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-${{ steps.version.outputs.VERSION }}
+          path: build-artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create release (on version tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build-artifacts/SuiteSpot.dll
+          body: |
+            ## SuiteSpot Plugin v${{ steps.version.outputs.VERSION }}
+            
+            **Build Information:**
+            - Version: ${{ steps.version.outputs.FULL_VERSION }}
+            - Built: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - Commit: ${{ github.sha }}
+            
+            **Installation:**
+            1. Download `SuiteSpot.dll` from the Assets section below
+            2. Place it in your BakkesMod plugins folder
+            3. Run `plugin load suitespot` in the Rocket League console (F6)
+            
+            **What's New:**
+            See [DECISIONS.md](https://github.com/${{ github.repository }}/blob/master/DECISIONS.md) for recent changes and improvements.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  validate:
+    name: Validate Build
+    runs-on: windows-latest
+    needs: build
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-*
+          path: validation-artifacts/
+
+      - name: Validate artifacts
+        shell: pwsh
+        run: |
+          $artifacts = Get-ChildItem -Path "validation-artifacts" -Recurse -Include "*.dll"
+          
+          if ($artifacts.Count -eq 0) {
+            Write-Error "No DLL artifacts found"
+            exit 1
+          }
+          
+          foreach ($artifact in $artifacts) {
+            Write-Host "Validating: $($artifact.Name)"
+            Write-Host "  Size: $($artifact.Length) bytes"
+            Write-Host "  Valid PE file: $(Test-Path $artifact.FullName)"
+          }
+          
+          Write-Host "✓ All artifacts validated successfully"
+
+  notify:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [ build, validate ]
+    if: always()
+    
+    steps:
+      - name: Build status
+        run: |
+          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.validate.result }}" = "success" ]; then
+            echo "✓ Build pipeline completed successfully"
+            echo "  Build: ${{ needs.build.result }}"
+            echo "  Validate: ${{ needs.validate.result }}"
+          else
+            echo "✗ Build pipeline failed"
+            echo "  Build: ${{ needs.build.result }}"
+            echo "  Validate: ${{ needs.validate.result }}"
+            exit 1
+          fi

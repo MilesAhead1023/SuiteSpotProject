@@ -15,7 +15,8 @@
         "checkmarks_and_bullets"
       ],
       "response_format": "minimal",
-      "response_on_gather": "✓ Context loaded. Ready.",
+      "show_context_stats": true,
+      "response_on_gather": "✓ Context loaded. {tokens_used}/{token_limit} tokens. Ready.",
       "files_to_read": [
         "project.json",
         "CLAUDE_AI.md",

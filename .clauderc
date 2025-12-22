@@ -1,0 +1,14 @@
+{
+  "name": "SuiteSpot - AI Development Mode",
+  "instructions": "CRITICAL: When initializing context gathering:\n1. Read project.json for constraints and configuration\n2. Read CLAUDE_AI.md for patterns and rules\n3. Load full API references from SuiteSpotDocuments/instructions/context/ as needed\n4. NEVER create markdown summary documents or notes\n5. Keep all context in memory only\n6. When user says 'gather suitespot2.0 context', finish with brief confirmation, not a document\n\nKey constraints for all development:\n- Thread safety MANDATORY: All game state via gameWrapper->SetTimeout()\n- Never store wrappers across frames\n- All CVars register in onLoad() only\n- Call SaveTrainingMaps() after modifying RLTraining\n- First line of every .cpp: #include \"pch.h\"\n- Build: msbuild SuiteSpotv2.0\\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64\n\nGit workflow:\n- Feature branches for new work\n- Tags format v*.*.* auto-trigger CI/CD releases\n- Push to master/main for automatic builds\n\nDo not explain these rules unless asked - they are constraints, not suggestions.",
+  "context_files": [
+    "project.json",
+    "CLAUDE_AI.md",
+    "DECISIONS.md"
+  ],
+  "api_reference_path": "SuiteSpotDocuments/instructions/context/",
+  "build_command": "msbuild SuiteSpotv2.0\\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64",
+  "build_output": "SuiteSpotv2.0\\plugins\\SuiteSpot.dll",
+  "no_documentation_generation": true,
+  "output_style": "Concise"
+}

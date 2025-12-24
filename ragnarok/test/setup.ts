@@ -182,7 +182,7 @@ const mockVscode = {
 };
 
 // Inject mock into global scope before any imports
-(global as any).vscode = mockVscode;
+(globalThis as any).vscode = mockVscode;
 
 // Export for tests that need direct access
 export default mockVscode;

@@ -1,0 +1,78 @@
+# clang-format configuration for SuiteSpot BakkesMod Plugin
+# This ensures consistent code formatting for both human and AI developers
+
+---
+# Base style
+BasedOnStyle: Microsoft
+
+# Indentation
+IndentWidth: 4
+UseTab: ForIndentation         # Match your existing code style (tabs, not spaces)
+TabWidth: 4
+ContinuationIndentWidth: 4
+
+# Line length
+ColumnLimit: 120               # Reasonable limit for modern displays
+
+# Braces
+BreakBeforeBraces: Allman      # Opening brace on new line
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Pointers and references
+PointerAlignment: Left         # int* ptr (not int *ptr)
+ReferenceAlignment: Left       # int& ref
+
+# Spacing
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Includes
+SortIncludes: false            # Don't auto-sort (pch.h must stay first!)
+IncludeBlocks: Preserve
+
+# Comments
+AlignTrailingComments: true
+ReflowComments: false          # Don't reformat comment text
+
+# Namespaces
+CompactNamespaces: false
+NamespaceIndentation: None
+
+# Classes
+AccessModifierOffset: -4       # Align public:/private: with class keyword
+BreakConstructorInitializers: BeforeComma
+
+# Functions
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackParameters: false
+
+# Control flow
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+
+# Penalty settings (formatting heuristics)
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+
+# C++ specific
+Standard: c++20
+Cpp11BracedListStyle: true
+FixNamespaceComments: true
+
+# Line endings
+DeriveLineEnding: false
+UseCRLF: false                 # Use LF (Unix-style), not CRLF
+
+# Other
+MaxEmptyLinesToKeep: 2
+KeepEmptyLinesAtTheStartOfBlocks: false

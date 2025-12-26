@@ -8,6 +8,7 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <filesystem>
 
 #include "IMGUI/imgui.h"
 #include "IMGUI/imgui_stdlib.h"

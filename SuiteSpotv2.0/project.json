@@ -1,0 +1,49 @@
+{
+  "project": "SuiteSpot",
+  "type": "BakkesMod Plugin",
+  "language": "C++",
+  "version": "1.0.0",
+  "build_target": "Release|x64",
+  "build_command": "msbuild SuiteSpotv2.0\\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64",
+  "build_output": "SuiteSpotv2.0\\plugins\\SuiteSpot.dll",
+  "entry_point": "SuiteSpot.h",
+  "critical_files": [
+    "SuiteSpot.h",
+    "SuiteSpot.cpp",
+    "MapList.h",
+    "MapList.cpp",
+    "Source.cpp",
+    "LoadoutManager.h",
+    "LoadoutManager.cpp"
+  ],
+  "constraints": {
+    "thread_safety": "MANDATORY - Use gameWrapper->SetTimeout() for all game state access",
+    "wrapper_lifetime": "Never store wrappers across frames - get fresh each use",
+    "lambda_capture": "Always by value in SetTimeout, never by reference",
+    "file_format": "All .cpp must start with '#include \"pch.h\"'",
+    "cvar_registration": "Only in onLoad() method",
+    "persistence": "Call SaveTrainingMaps() after modifying RLTraining vector"
+  },
+  "key_patterns": {
+    "game_state_access": "gameWrapper->SetTimeout([this](GameWrapper* gw) { ServerWrapper server = gw->GetCurrentGameState(); if (!server) return; }, 0.0f)",
+    "cvar_registration": "cvarManager->registerCvar(\"suitespot_*\", default, desc, ...)",
+    "event_hooking": "gameWrapper->HookEventWithCallerPost(\"Function TAGame...\", bind(...))"
+  },
+  "documentation": {
+    "quick_ref": "CLAUDE_AI.md",
+    "api_docs": "SuiteSpotDocuments/instructions/context/",
+    "architecture": "DECISIONS.md",
+    "build_issues": "BUILD_TROUBLESHOOTING.md",
+    "release": "DEPLOYMENT.md"
+  },
+  "git_workflow": {
+    "branch_naming": "feature/*, bugfix/*, docs/*",
+    "release_tagging": "v*.*.* (semantic versioning)",
+    "release_trigger": "Tag v*.*.* auto-triggers CI/CD"
+  },
+  "ci_cd": {
+    "workflow_file": ".github/workflows/build.yml",
+    "triggers": ["push to master/main", "PR to master/main", "version tags v*.*.*"],
+    "artifacts_retention_days": 30
+  }
+}

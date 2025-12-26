@@ -13,8 +13,16 @@ The SuiteSpot plugin project is located at:
 ### Main Plugin Files (`SuiteSpotv2.0/`)
 
 -   `SuiteSpot.h` & `SuiteSpot.cpp`: The core plugin class. Contains lifecycle methods (`onLoad`, `onUnload`), event hooks, CVar registration, and main plugin logic.
--   `Source.cpp`: ImGui settings UI implementation. Contains `RenderSettings()` function for the plugin settings window.
+-   `Source.cpp`: Settings window entry point. Delegates `RenderSettings()` to `SettingsUI`.
+-   `SettingsUI.h` & `SettingsUI.cpp`: Main ImGui settings window rendering and tab content.
+-   `PrejumpUI.h` & `PrejumpUI.cpp`: Prejump pack tab rendering and filtering UI.
+-   `LoadoutUI.h` & `LoadoutUI.cpp`: Loadout management tab UI and selection state.
+-   `OverlayRenderer.h` & `OverlayRenderer.cpp`: Post-match overlay rendering and visual layout parameters.
 -   `MapList.h` & `MapList.cpp`: Map data storage. Contains `RLMaps`, `RLTraining`, and `RLWorkshop` vectors with map information.
+-   `MapManager.h` & `MapManager.cpp`: Map persistence, shuffle bag, and workshop discovery logic.
+-   `SettingsSync.h` & `SettingsSync.cpp`: Centralized CVar registration and settings state synchronization.
+-   `AutoLoadFeature.h` & `AutoLoadFeature.cpp`: Match-end auto-load and auto-queue logic (uses SetTimeout).
+-   `PrejumpPackManager.h` & `PrejumpPackManager.cpp`: Prejump pack loading, caching, and filtering logic.
 -   `GuiBase.h` & `GuiBase.cpp`: Base class for ImGui settings windows. Handles window lifecycle and rendering.
 -   `LoadoutManager.h` & `LoadoutManager.cpp`: Car loadout management functionality.
 -   `pch.h` & `pch.cpp`: Precompiled header files. **CRITICAL**: Every `.cpp` must include `pch.h` as the first line.
@@ -78,7 +86,7 @@ The BakkesMod SDK is **not** stored in the project directory. It's referenced vi
 
 | Task | File to Modify |
 |------|---------------|
-| Add UI elements | `Source.cpp` (RenderSettings function) |
+| Add UI elements | `SettingsUI.cpp` (RenderMainSettingsWindow and tab renderers) |
 | Add game logic | `SuiteSpot.cpp` |
 | Add event hook | `SuiteSpot.cpp` (register in onLoad) |
 | Add CVar | `SuiteSpot.cpp` (register in onLoad) |

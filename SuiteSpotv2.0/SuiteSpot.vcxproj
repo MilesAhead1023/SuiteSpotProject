@@ -136,8 +136,16 @@ exit /b 0</Command>
     <ClCompile Include="IMGUI\imgui_stdlib.cpp" />
     <ClCompile Include="imgui\imgui_timeline.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
+    <ClCompile Include="AutoLoadFeature.cpp" />
     <ClCompile Include="LoadoutManager.cpp" />
+    <ClCompile Include="MapManager.cpp" />
     <ClCompile Include="MapList.cpp" />
+    <ClCompile Include="PrejumpPackManager.cpp" />
+    <ClCompile Include="PrejumpUI.cpp" />
+    <ClCompile Include="LoadoutUI.cpp" />
+    <ClCompile Include="OverlayRenderer.cpp" />
+    <ClCompile Include="SettingsUI.cpp" />
+    <ClCompile Include="SettingsSync.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -161,9 +169,17 @@ exit /b 0</Command>
     <ClInclude Include="imgui\imstb_rectpack.h" />
     <ClInclude Include="imgui\imstb_textedit.h" />
     <ClInclude Include="imgui\imstb_truetype.h" />
+    <ClInclude Include="AutoLoadFeature.h" />
     <ClInclude Include="LoadoutManager.h" />
     <ClInclude Include="logging.h" />
+    <ClInclude Include="MapManager.h" />
     <ClInclude Include="MapList.h" />
+    <ClInclude Include="PrejumpPackManager.h" />
+    <ClInclude Include="PrejumpUI.h" />
+    <ClInclude Include="LoadoutUI.h" />
+    <ClInclude Include="OverlayRenderer.h" />
+    <ClInclude Include="SettingsUI.h" />
+    <ClInclude Include="SettingsSync.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="GuiBase.h" />
     <ClInclude Include="SuiteSpot.h" />
@@ -181,6 +197,7 @@ exit /b 0</Command>
     <None Include=".github\pull_request_template.md" />
     <None Include=".github\workflows\branch-flow.yml" />
     <None Include="README.md" />
+    <None Include="TODO.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -65,8 +65,10 @@ void SuiteSpot::SetImGuiContext(uintptr_t ctx) {
 // relied upon by external automation and saved settings; altering them
 // will change user-visible state persistence and CLI integrations.
 void SuiteSpot::RenderSettings() {
-    // Header with status
-    ImGui::TextUnformatted("SuiteSpot - Auto Map Loader");
+    // Header with metadata
+    ImGui::TextUnformatted("SuiteSpot");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "By: Flicks Creations");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Version: %s", plugin_version);
     
     // Only show status if enabled
     if (enabled) {
@@ -426,92 +428,6 @@ if (ImGui::InputInt("Delay Queue (sec)", &delayQueueSec)) {
                 addSuccessTimer -= ImGui::GetIO().DeltaTime;
                 if (addSuccessTimer <= 0.0f) {
                     addSuccess = false;
-                }
-            }
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::TextUnformatted("Training Options:");
-        ImGui::Spacing();
-        
-        CVarWrapper shuffleCvar = cvarManager->getCvar("suitespot_training_shuffle");
-        if (shuffleCvar) {
-            trainingShuffleEnabled = shuffleCvar.getBoolValue();
-            if (ImGui::Checkbox("Shuffle Training Packs", &trainingShuffleEnabled)) {
-                shuffleCvar.setValue(trainingShuffleEnabled);
-                trainingShuffleBag.clear();
-                if (trainingShuffleEnabled) {
-                    if (selectedTrainingIndices.empty()) {
-                        // If nothing is selected, default to all packs.
-                        for (int i = 0; i < static_cast<int>(RLTraining.size()); ++i) {
-                            selectedTrainingIndices.insert(i);
-                            trainingShuffleBag.push_back(RLTraining[i]);
-                        }
-                    } else {
-                        for (int idx : selectedTrainingIndices) {
-                            if (idx >= 0 && idx < static_cast<int>(RLTraining.size())) {
-                                trainingShuffleBag.push_back(RLTraining[idx]);
-                            }
-                        }
-                    }
-                }
-                trainingBagSize = static_cast<int>(trainingShuffleBag.size());
-                cvarManager->getCvar("suitespot_training_bag_size").setValue(trainingBagSize);
-                SaveShuffleBag();
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Shuffle rotates through the selected training packs");
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button("Toggle All##training_shuffle")) {
-                if (selectedTrainingIndices.size() == RLTraining.size()) {
-                    selectedTrainingIndices.clear();
-                    trainingShuffleBag.clear();
-                } else {
-                    selectedTrainingIndices.clear();
-                    trainingShuffleBag.clear();
-                    for (int i = 0; i < static_cast<int>(RLTraining.size()); ++i) {
-                        selectedTrainingIndices.insert(i);
-                        trainingShuffleBag.push_back(RLTraining[i]);
-                    }
-                }
-                trainingBagSize = static_cast<int>(trainingShuffleBag.size());
-                cvarManager->getCvar("suitespot_training_bag_size").setValue(trainingBagSize);
-                SaveShuffleBag();
-            }
-        }
-
-        if (trainingShuffleEnabled) {
-            ImGui::Spacing();
-            int selectedCount = static_cast<int>(selectedTrainingIndices.size());
-            ImGui::TextUnformatted(("Selected for shuffle: " + std::to_string(selectedCount)).c_str());
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Shuffle will rotate through the checked training packs");
-            }
-
-            if (ImGui::CollapsingHeader("Shuffle Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::TextDisabled("Check packs to include in shuffle");
-                for (int i = 0; i < (int)RLTraining.size(); ++i) {
-                    bool inBag = selectedTrainingIndices.count(i) > 0;
-                    std::string label = RLTraining[i].name + " (Shots:" + std::to_string(RLTraining[i].shotCount) + ")";
-                    if (ImGui::Checkbox(label.c_str(), &inBag)) {
-                        if (inBag) {
-                            selectedTrainingIndices.insert(i);
-                            trainingShuffleBag.push_back(RLTraining[i]);
-                        } else {
-                            selectedTrainingIndices.erase(i);
-                            auto it = std::find_if(trainingShuffleBag.begin(), trainingShuffleBag.end(),
-                                [&](const TrainingEntry& e) { return e.code == RLTraining[i].code; });
-                            if (it != trainingShuffleBag.end()) {
-                                trainingShuffleBag.erase(it);
-                            }
-                        }
-                        trainingBagSize = static_cast<int>(trainingShuffleBag.size());
-                        cvarManager->getCvar("suitespot_training_bag_size").setValue(trainingBagSize);
-                        SaveShuffleBag();
-                    }
                 }
             }
         }
@@ -963,23 +879,63 @@ void SuiteSpot::RenderPrejumpPacksTab() {
         return;
     }
 
-    // ===== SHUFFLE BAG STATUS =====
-    int shufflePackCount = static_cast<int>(trainingShuffleBag.size());
-    if (shufflePackCount > 0) {
-        ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Shuffle Bag: %d pack%s", shufflePackCount, shufflePackCount == 1 ? "" : "s");
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Clear Shuffle")) {
-            trainingShuffleBag.clear();
-            selectedTrainingIndices.clear();
-            SaveShuffleBag();
+    // ===== SHUFFLE BAG STATUS & CONTROLS =====
+    if (ImGui::CollapsingHeader("Shuffle Bag Manager", ImGuiTreeNodeFlags_DefaultOpen)) {
+        int shufflePackCount = static_cast<int>(trainingShuffleBag.size());
+        
+        if (shufflePackCount > 0) {
+            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Current Bag: %d pack%s", shufflePackCount, shufflePackCount == 1 ? "" : "s");
+            
+            ImGui::SameLine();
+            if (ImGui::Button("Start Shuffle Training")) {
+                // Enable plugin, set mode to Training, and enable Shuffle
+                enabled = true;
+                cvarManager->getCvar("suitespot_enabled").setValue(1);
+                
+                mapType = 1; // Training
+                cvarManager->getCvar("suitespot_map_type").setValue(1);
+                
+                trainingShuffleEnabled = true;
+                cvarManager->getCvar("suitespot_training_shuffle").setValue(1);
+                
+                LOG("SuiteSpot: Shuffle training started with " + std::to_string(shufflePackCount) + " packs");
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Enable SuiteSpot, switch to Training mode, and enable Shuffle using your current bag.");
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Clear Bag")) {
+                trainingShuffleBag.clear();
+                selectedTrainingIndices.clear();
+                SaveShuffleBag();
+                LOG("SuiteSpot: Shuffle bag cleared");
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Remove all packs from the shuffle bag.");
+            }
+            
+            // Show Shuffle toggle here as well for convenience
+            ImGui::SameLine(400);
+            if (ImGui::Checkbox("Shuffle Active", &trainingShuffleEnabled)) {
+                cvarManager->getCvar("suitespot_training_shuffle").setValue(trainingShuffleEnabled);
+            }
+        } else {
+            ImGui::TextDisabled("Shuffle Bag: Empty");
+            ImGui::TextWrapped("Add packs to your bag using the '+Shuffle' buttons in the table below to create a rotation.");
         }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Clear all packs from shuffle bag");
-        }
-    } else {
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Shuffle Bag: Empty (click 'Add to Shuffle' to build your rotation)");
+        
+        ImGui::Spacing();
     }
+
+    ImGui::Separator();
     ImGui::Spacing();
+
+    // Early return if no packs loaded
+    if (prejumpPacks.empty()) {
+        ImGui::TextWrapped("No packs available. Click 'Scrape Prejump' to download the training pack database from prejump.com.");
+        return;
+    }
 
     // ===== FILTER & SEARCH CONTROLS =====
     ImGui::TextUnformatted("Search & Filters:");
@@ -1398,7 +1354,9 @@ void SuiteSpot::RenderPrejumpPacksTab() {
     }
 
 void SuiteSpot::RenderWindow() {
-    ImGui::TextUnformatted("SuiteSpot Standalone Window");
+    ImGui::TextUnformatted("SuiteSpot");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "By: Flicks Creations");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Version: %s", plugin_version);
     ImGui::Separator();
     
     if (enabled) {

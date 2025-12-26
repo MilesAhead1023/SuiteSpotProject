@@ -2,7 +2,7 @@
 
 **Build locally:**
 ```bash
-msbuild SuiteSpotv2.0\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64
+& "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe" SuiteSpotv2.0\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64
 ```
 
 **Output:** `SuiteSpotv2.0\plugins\SuiteSpot.dll`

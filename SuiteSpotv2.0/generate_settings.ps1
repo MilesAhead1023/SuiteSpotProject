@@ -18,18 +18,27 @@ SuiteSpot
 8|
 3|Map Type (0=Freeplay, 1=Training, 2=Workshop)|suitespot_map_type|0|2
 1|Auto-Queue After Map Load|suitespot_auto_queue
+1|Shuffle Training Packs|suitespot_training_shuffle
 8|
-3|Queue Delay (seconds)|suitespot_delay_queue_sec|0|300
-3|Freeplay Delay (seconds)|suitespot_delay_freeplay_sec|0|300
-3|Training Delay (seconds)|suitespot_delay_training_sec|0|300
-3|Workshop Delay (seconds)|suitespot_delay_workshop_sec|0|300
+9|Delays (seconds)
+3|Queue Delay|suitespot_delay_queue_sec|0|300
+3|Freeplay Delay|suitespot_delay_freeplay_sec|0|300
+3|Training Delay|suitespot_delay_training_sec|0|300
+3|Workshop Delay|suitespot_delay_workshop_sec|0|300
 8|
-3|Freeplay Map Index|suitespot_current_freeplay_index|0|1000
-3|Training Map Index|suitespot_current_training_index|0|1000
-3|Workshop Map Index|suitespot_current_workshop_index|0|1000
+9|Overlay Settings
+1|Show Test Overlay|ss_testoverlay
+3|Overlay Width|overlay_width|400|1600
+3|Overlay Height|overlay_height|200|800
+3|Overlay Transparency|overlay_alpha|0|1
+3|Display Duration|overlay_duration|5|60
 8|
-9|Settings are automatically saved when changed
-9|Use console commands: suitespot_enabled 1, suitespot_map_type 2, etc.
+9|Team Colors (Hue)
+3|Blue Team Hue|blue_team_hue|0|360
+3|Orange Team Hue|orange_team_hue|0|360
+8|
+9|Use 'togglemenu SuiteSpot' to open the control window
+9|Author: Flicks Creations
 "@
 
 # Write the file

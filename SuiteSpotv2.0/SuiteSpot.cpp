@@ -177,15 +177,22 @@ int SuiteSpot::GetRandomTrainingIndex() const {
     if (trainingShuffleBag.empty()) {
         return 0;
     }
+    
     static std::mt19937 rng(std::random_device{}());
     std::uniform_int_distribution<int> dist(0, static_cast<int>(trainingShuffleBag.size()) - 1);
     int bagIndex = dist(rng);
+    
+    // Attempt to find in RLTraining (local packs)
     auto it = std::find_if(RLTraining.begin(), RLTraining.end(),
         [&](const TrainingEntry& e) { return e.code == trainingShuffleBag[bagIndex].code; });
+    
     if (it != RLTraining.end()) {
         return static_cast<int>(std::distance(RLTraining.begin(), it));
     }
-    return 0;
+    
+    // If not in RLTraining, it might be a Prejump pack. 
+    // The GameEndedEvent will handle loading by code if we can't find an index.
+    return -1; 
 }
 
 // #detailed comments: LoadTrainingMaps
@@ -531,6 +538,50 @@ void SuiteSpot::SaveWorkshopMaps() const {
 }
 
 // ===== PREJUMP SCRAPER INTEGRATION =====
+
+PostMatchOverlayWindow::PostMatchOverlayWindow(SuiteSpot* plugin) : plugin_(plugin) {
+    isWindowOpen_ = false;
+}
+
+void PostMatchOverlayWindow::Open() {
+    isWindowOpen_ = true;
+}
+
+void PostMatchOverlayWindow::Close() {
+    isWindowOpen_ = false;
+}
+
+void PostMatchOverlayWindow::Render() {
+    if (!isWindowOpen_) return;
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+                             ImGuiWindowFlags_NoScrollbar |
+                             ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoInputs |
+                             ImGuiWindowFlags_NoNavFocus |
+                             ImGuiWindowFlags_NoBackground;
+
+    ImVec2 display = ImGui::GetIO().DisplaySize;
+    const ImVec2 overlaySize = ImVec2(std::max(400.0f, plugin_->overlayWidth), std::max(180.0f, plugin_->overlayHeight));
+    ImVec2 pos = ImVec2((display.x - overlaySize.x) * 0.5f + plugin_->overlayOffsetX, display.y * 0.08f + plugin_->overlayOffsetY);
+
+    ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(overlaySize, ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    
+    if (!ImGui::Begin(GetMenuTitle().c_str(), &isWindowOpen_, flags)) {
+        ImGui::End();
+        return;
+    }
+
+    RenderWindow();
+    ImGui::End();
+}
+
+void PostMatchOverlayWindow::RenderWindow() {
+    plugin_->RenderPostMatchOverlay();
+}
 
 std::filesystem::path SuiteSpot::GetPrejumpPacksPath() const {
     return GetSuiteTrainingDir() / "prejump_packs.json";
@@ -946,6 +997,9 @@ void SuiteSpot::GameEndedEvent(std::string name) {
 
                 postMatch.start = std::chrono::steady_clock::now();
                 postMatch.active = true;
+                if (postMatchOverlayWindow) {
+                    postMatchOverlayWindow->Open();
+                }
                 LOG("SuiteSpot: Post-match overlay activated - {} vs {}, Score: {}-{}",
                     postMatch.myTeamName, postMatch.oppTeamName, postMatch.myScore, postMatch.oppScore);
                 // Overlay is now independent from settings window - no menu toggle needed
@@ -975,14 +1029,29 @@ void SuiteSpot::GameEndedEvent(std::string name) {
             LOG("SuiteSpot: Loading freeplay map: " + RLMaps[currentIndex].name);
         }
     } else if (mapType == 1) { // Training
-        if (RLTraining.empty()) {
+        if (RLTraining.empty() && trainingShuffleBag.empty()) {
             LOG("SuiteSpot: No training maps configured.");
         } else {
-            int indexToLoad = trainingShuffleEnabled ? GetRandomTrainingIndex() : currentTrainingIndex;
-            indexToLoad = std::clamp(indexToLoad, 0, (int)RLTraining.size()-1);
-            safeExecute(delayTrainingSec, "load_training " + RLTraining[indexToLoad].code);
-            mapLoadDelay = delayTrainingSec;
-            LOG("SuiteSpot: Loading training map: " + RLTraining[indexToLoad].name);
+            std::string codeToLoad = "";
+            std::string nameToLoad = "";
+
+            if (trainingShuffleEnabled && !trainingShuffleBag.empty()) {
+                static std::mt19937 rng(std::random_device{}());
+                std::uniform_int_distribution<int> dist(0, static_cast<int>(trainingShuffleBag.size()) - 1);
+                int bagIndex = dist(rng);
+                codeToLoad = trainingShuffleBag[bagIndex].code;
+                nameToLoad = trainingShuffleBag[bagIndex].name;
+            } else if (!RLTraining.empty()) {
+                currentTrainingIndex = std::clamp(currentTrainingIndex, 0, (int)RLTraining.size() - 1);
+                codeToLoad = RLTraining[currentTrainingIndex].code;
+                nameToLoad = RLTraining[currentTrainingIndex].name;
+            }
+
+            if (!codeToLoad.empty()) {
+                safeExecute(delayTrainingSec, "load_training " + codeToLoad);
+                mapLoadDelay = delayTrainingSec;
+                LOG("SuiteSpot: Loading training map: " + nameToLoad);
+            }
         }
     } else if (mapType == 2) { // Workshop
         if (RLWorkshop.empty()) {
@@ -1028,16 +1097,39 @@ void SuiteSpot::onLoad() {
     
     LoadHooks();
 
-    // Register toggle for the standalone window
-    cvarManager->registerNotifier("suitespot_toggle_window", [this](std::vector<std::string> args) {
-        showWindow = !showWindow;
-    }, "Toggle the SuiteSpot standalone control window", PERMISSION_ALL);
+    // Initialize windows
+    postMatchOverlayWindow = std::make_shared<PostMatchOverlayWindow>(this);
 
-    // Force the plugin "window" open so Render() is called every frame
-    // This allows us to draw the overlay even when the control window is closed.
-    gameWrapper->SetTimeout([this](GameWrapper* gw) {
-        cvarManager->executeCommand("openmenu " + GetMenuName());
-    }, 1.0f); // Small delay to ensure registration is complete
+    // Register test overlay toggle
+    cvarManager->registerNotifier("ss_testoverlay", [this](std::vector<std::string> args) {
+        // Mock data if empty for testing
+        if (postMatch.players.empty()) {
+            postMatch.myTeamName = "Blue Team";
+            postMatch.oppTeamName = "Orange Team";
+            postMatch.myScore = 3;
+            postMatch.oppScore = 2;
+            postMatch.playlist = "Competitive Doubles";
+            postMatch.overtime = false;
+            
+            PostMatchPlayerRow p1; p1.name = "LocalPlayer"; p1.score = 650; p1.goals = 2; p1.isLocal = true; p1.teamIndex = 0; p1.isMVP = true;
+            PostMatchPlayerRow p2; p2.name = "Teammate"; p2.score = 400; p2.goals = 1; p2.isLocal = false; p2.teamIndex = 0;
+            PostMatchPlayerRow p3; p3.name = "Opponent 1"; p3.score = 500; p3.goals = 1; p3.isLocal = false; p3.teamIndex = 1; p3.isMVP = true;
+            PostMatchPlayerRow p4; p4.name = "Opponent 2"; p4.score = 300; p4.goals = 1; p4.isLocal = false; p4.teamIndex = 1;
+            
+            postMatch.players = { p1, p2, p3, p4 };
+        }
+        
+        if (!postMatch.active) {
+            postMatch.start = std::chrono::steady_clock::now();
+            postMatch.active = true;
+            postMatchOverlayWindow->Open();
+            LOG("SuiteSpot: Test overlay ACTIVATED via ss_testoverlay");
+        } else {
+            postMatch.active = false;
+            postMatchOverlayWindow->Close();
+            LOG("SuiteSpot: Test overlay DEACTIVATED via ss_testoverlay");
+        }
+    }, "Toggle the SuiteSpot test overlay", PERMISSION_ALL);
 
     // Enable/Disable plugin
     cvarManager->registerCvar("suitespot_enabled", "0", "Enable SuiteSpot", true, true, 0, true, 1)
@@ -1106,6 +1198,22 @@ void SuiteSpot::onLoad() {
             currentWorkshopIndex = std::max(0, cvar.getIntValue());
         });
 
+    // Overlay Layout CVars
+    cvarManager->registerCvar("overlay_width", "880", "Overlay width", true, true, 400, true, 1600)
+        .addOnValueChanged([this](string oldValue, CVarWrapper cvar) { overlayWidth = cvar.getFloatValue(); });
+    cvarManager->registerCvar("overlay_height", "400", "Overlay height", true, true, 200, true, 800)
+        .addOnValueChanged([this](string oldValue, CVarWrapper cvar) { overlayHeight = cvar.getFloatValue(); });
+    cvarManager->registerCvar("overlay_alpha", "0.85", "Overlay transparency", true, true, 0, true, 1)
+        .addOnValueChanged([this](string oldValue, CVarWrapper cvar) { overlayAlpha = cvar.getFloatValue(); });
+    cvarManager->registerCvar("overlay_duration", "15", "Overlay display duration", true, true, 5, true, 60)
+        .addOnValueChanged([this](string oldValue, CVarWrapper cvar) { postMatchDurationSec = cvar.getFloatValue(); });
+    
+    // Team Hue CVars
+    cvarManager->registerCvar("blue_team_hue", "240", "Blue team hue", true, true, 0, true, 360)
+        .addOnValueChanged([this](string oldValue, CVarWrapper cvar) { blueTeamHue = cvar.getFloatValue(); });
+    cvarManager->registerCvar("orange_team_hue", "25", "Orange team hue", true, true, 0, true, 360)
+        .addOnValueChanged([this](string oldValue, CVarWrapper cvar) { orangeTeamHue = cvar.getFloatValue(); });
+
     // Store training maps string for persistence compatibility
     cvarManager->registerCvar("ss_training_maps", "", "Stored training maps", true, false, 0, false, 0);
 
@@ -1123,6 +1231,14 @@ void SuiteSpot::onLoad() {
     cvarManager->getCvar("suitespot_current_freeplay_index").setValue(currentIndex);
     cvarManager->getCvar("suitespot_current_training_index").setValue(currentTrainingIndex);
     cvarManager->getCvar("suitespot_current_workshop_index").setValue(currentWorkshopIndex);
+    
+    // Sync Layout CVars
+    cvarManager->getCvar("overlay_width").setValue(overlayWidth);
+    cvarManager->getCvar("overlay_height").setValue(overlayHeight);
+    cvarManager->getCvar("overlay_alpha").setValue(overlayAlpha);
+    cvarManager->getCvar("overlay_duration").setValue(postMatchDurationSec);
+    cvarManager->getCvar("blue_team_hue").setValue(blueTeamHue);
+    cvarManager->getCvar("orange_team_hue").setValue(orangeTeamHue);
     
     LOG("SuiteSpot: Plugin initialization complete");
 }
@@ -1145,6 +1261,9 @@ void SuiteSpot::RenderPostMatchOverlay() {
     // Auto-hide after duration
     if (postMatch.active && elapsed >= postMatchDurationSec) {
         postMatch.active = false;
+        if (postMatchOverlayWindow) {
+            postMatchOverlayWindow->Close();
+        }
         return;
     }
 
@@ -1162,28 +1281,19 @@ void SuiteSpot::RenderPostMatchOverlay() {
     const ImVec2 overlaySize = ImVec2(std::max(400.0f, overlayWidth), std::max(180.0f, overlayHeight));
     ImVec2 pos = ImVec2((display.x - overlaySize.x) * 0.5f + overlayOffsetX, display.y * 0.08f + overlayOffsetY);
 
-    ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-    ImGui::SetNextWindowSize(overlaySize, ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.0f);
-
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                             ImGuiWindowFlags_NoScrollbar |
-                             ImGuiWindowFlags_NoSavedSettings |
-                             ImGuiWindowFlags_NoFocusOnAppearing |
-                             ImGuiWindowFlags_NoInputs |
-                             ImGuiWindowFlags_NoNavFocus |
-                             ImGuiWindowFlags_NoBackground;
-
-    bool windowOpen = true;
-    if (!ImGui::Begin("SuiteSpot Post-Match Overlay", &windowOpen, flags)) {
-        ImGui::End();
-        return;
-    }
-
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 winPos = ImGui::GetWindowPos();
-    ImVec2 winSize = ImGui::GetWindowSize();
+    ImVec2 winPos = pos; // Use pos as start for drawing since we are in the overlay window context
+    ImVec2 winSize = overlaySize;
     ImVec2 winEnd = ImVec2(winPos.x + winSize.x, winPos.y + winSize.y);
+
+    // Set window pos and size for the draw list if needed, but since we are called inside Begin/End 
+    // of PostMatchOverlayWindow::Render(), the draw list coordinates are usually absolute or relative to window.
+    // However, PostMatchOverlayWindow::Render() calls SetNextWindowPos/Size.
+    
+    // Let's adjust to use window pos
+    winPos = ImGui::GetWindowPos();
+    winSize = ImGui::GetWindowSize();
+    winEnd = ImVec2(winPos.x + winSize.x, winPos.y + winSize.y);
 
     // Draw background
     ImU32 baseBg = ImGui::GetColorU32(ImVec4(0.f, 0.f, 0.f, backgroundAlpha * alpha));
@@ -1295,21 +1405,15 @@ void SuiteSpot::RenderPostMatchOverlay() {
         
         contentY += teamSectionSpacing;
     }
-
-    ImGui::End();
 }
 
 void SuiteSpot::Render() {
-    // Always attempt to render the post-match overlay (it handles its own internal active/timer state)
-    RenderPostMatchOverlay();
-
-    // Render the standalone control window if enabled
-    if (showWindow) {
-        ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("SuiteSpot Control", &showWindow)) {
-            RenderWindow();
-        }
-        ImGui::End();
+    // Call base class Render() which handles isWindowOpen_, ImGui::Begin/End, and calling RenderWindow() for the main control window
+    PluginWindowBase::Render();
+    
+    // Call Render() for the overlay window
+    if (postMatchOverlayWindow) {
+        postMatchOverlayWindow->Render();
     }
 }
 

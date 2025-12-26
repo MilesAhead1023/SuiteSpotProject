@@ -13,7 +13,7 @@
 // Forward declarations for additional windows
 class SuiteSpotSettingsWindow2;
 class SuiteSpotTestWindow;
-class SuiteSpotPostMatchWindow;
+class PostMatchOverlayWindow;
 
 // External helpers
 void SaveTrainingMaps(std::shared_ptr<CVarManagerWrapper> cvarManager, const std::vector<TrainingEntry>& RLTraining);
@@ -113,53 +113,8 @@ public:
 
     // Post-match overlay rendering
     void RenderPostMatchOverlay();
-
-private:
-    // state (one definition only)
-    bool enabled = false;
-    bool showWindow = false; // Internal toggle for the standalone control window
-
-    bool autoQueue = false;   // (renamed from “Requeue”)
-    int  mapType = 0;         // 0=Freeplay, 1=Training, 2=Workshop
-
-    int  delayQueueSec    = 0;
-    int  delayFreeplaySec = 0;
-    int  delayTrainingSec = 0;
-    int  delayWorkshopSec = 0;
-
-    int  currentIndex = 0;           // freeplay
-    int  currentTrainingIndex = 0;   // training
-    int  currentWorkshopIndex = 0;   // workshop
-
-    bool trainingShuffleEnabled = false;
-    int  trainingBagSize = 1;
-    std::vector<TrainingEntry> trainingShuffleBag;
-    std::set<int> selectedTrainingIndices;
-
-    std::string lastGameMode = "";
-
-    // Prejump scraper state
-    bool prejumpScrapingInProgress = false;
-    std::string prejumpLastUpdated = "";
-    int prejumpPackCount = 0;
-    std::vector<TrainingEntry> prejumpPacks;  // Loaded prejump packs
     
-    // Prejump UI state
-    char prejumpSearchText[256] = {0};
-    std::string prejumpDifficultyFilter = "All";
-    std::string prejumpTagFilter = "";
-    int prejumpMinShots = 0;
-    int prejumpMaxShots = 100;
-    int prejumpSortColumn = 0;  // 0=Name, 1=Creator, 2=Difficulty, 3=Shots, 4=Likes, 5=Plays
-    bool prejumpSortAscending = true;
-
-    // Shuffle helpers
-    int GetRandomTrainingIndex() const;
-
-    ImGuiContext* imguiCtx = nullptr;
-    
-    // Loadout management
-    std::unique_ptr<LoadoutManager> loadoutManager;
+    PostMatchInfo& GetPostMatchInfo() { return postMatch; }
 
     PostMatchInfo postMatch;
     float postMatchDurationSec = 15.0f;
@@ -211,4 +166,70 @@ private:
     float fadeInDuration = 0.5f;
     float fadeOutDuration = 2.0f;
     bool enableFadeEffects = true;
+
+private:
+    // state (one definition only)
+    bool enabled = false;
+
+    // Windows
+    std::shared_ptr<PostMatchOverlayWindow> postMatchOverlayWindow;
+
+    bool autoQueue = false;   // (renamed from “Requeue”)
+    int  mapType = 0;         // 0=Freeplay, 1=Training, 2=Workshop
+
+    int  delayQueueSec    = 0;
+    int  delayFreeplaySec = 0;
+    int  delayTrainingSec = 0;
+    int  delayWorkshopSec = 0;
+
+    int  currentIndex = 0;           // freeplay
+    int  currentTrainingIndex = 0;   // training
+    int  currentWorkshopIndex = 0;   // workshop
+
+    bool trainingShuffleEnabled = false;
+    int  trainingBagSize = 1;
+    std::vector<TrainingEntry> trainingShuffleBag;
+    std::set<int> selectedTrainingIndices;
+
+    std::string lastGameMode = "";
+
+    // Prejump scraper state
+    bool prejumpScrapingInProgress = false;
+    std::string prejumpLastUpdated = "";
+    int prejumpPackCount = 0;
+    std::vector<TrainingEntry> prejumpPacks;  // Loaded prejump packs
+    
+    // Prejump UI state
+    char prejumpSearchText[256] = {0};
+    std::string prejumpDifficultyFilter = "All";
+    std::string prejumpTagFilter = "";
+    int prejumpMinShots = 0;
+    int prejumpMaxShots = 100;
+    int prejumpSortColumn = 0;  // 0=Name, 1=Creator, 2=Difficulty, 3=Shots, 4=Likes, 5=Plays
+    bool prejumpSortAscending = true;
+
+    // Shuffle helpers
+    int GetRandomTrainingIndex() const;
+
+    ImGuiContext* imguiCtx = nullptr;
+    
+    // Loadout management
+    std::unique_ptr<LoadoutManager> loadoutManager;
+};
+
+class PostMatchOverlayWindow : public PluginWindowBase {
+public:
+    PostMatchOverlayWindow(SuiteSpot* plugin);
+    void Render() override;
+    void RenderWindow() override;
+    void Open();
+    void Close();
+    
+    std::string GetMenuName() override { return "SuiteSpotPostMatchOverlay"; }
+    std::string GetMenuTitle() override { return "SuiteSpot Post-Match Overlay"; }
+    bool IsActiveOverlay() override { return true; }
+    bool ShouldBlockInput() override { return false; }
+
+private:
+    SuiteSpot* plugin_;
 };

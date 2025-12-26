@@ -2,7 +2,7 @@
 
 ## Build
 ```powershell
-msbuild SuiteSpotv2.0\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64
+& "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe" SuiteSpotv2.0\SuiteSpot.sln /p:Configuration=Release /p:Platform=x64
 ```
 Output: `SuiteSpotv2.0\plugins\SuiteSpot.dll`
 
@@ -31,6 +31,10 @@ gameWrapper->SetTimeout([this](GameWrapper* gw) {
 **Persistence:**
 - `SaveTrainingMaps()` after modifying `RLTraining`
 - Location: `%APPDATA%\bakkesmod\bakkesmod\data\SuiteTraining\`
+
+**Documentation First (MANDATORY):**
+- **Rule:** Before writing code, search `SuiteSpotv2.0\SuiteSpotDocuments\instructions` for relevant `.md` files.
+- **Requirement:** State "Read [filename]" or "No docs found for [topic]" before changing code.
 
 **File Format:**
 - Every `.cpp` starts: `#include "pch.h"`
